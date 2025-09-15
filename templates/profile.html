@@ -1,0 +1,10 @@
+{# profile.html #}
+{% extends "base.html" %}
+{% block title %}Профиль{% endblock title %}
+
+{% block content %}
+<h2 class="text-2xl font-semibold mb-4">Мой профиль</h2>
+<p>Имя пользователя: {{ session['username'] }}</p>
+<p>Email: {{ session['email'] }}</p>
+<!-- Здесь можно добавить список собственных постов, статистику лайков и комментариев -->
+{% endblock content %}

@@ -1,0 +1,30 @@
+{# index.html #}
+{% extends "base.html" %}
+
+{% block title %}Главная{% endblock title %}
+
+{% block content %}
+  <!-- Список постов -->
+  <div class="grid gap-6">
+    {% for post in posts %}
+    <div id="post-{{ loop.index }}" class="bg-white rounded-lg shadow hover:shadow-md transition p-4">
+      <h3 class="text-xl font-semibold text-gray-800">{{ post.title }}</h3>
+      <div class="text-sm text-gray-500 mb-2">
+        Автор: {{ post.user_id }} • {{ post.created_at }}
+      </div>
+      <p class="text-gray-700">{{ post.content }}</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Пагинация -->
+  <div class="mt-6 text-center">
+    <form method="post">
+      <input type="hidden" name="scroll_to" value="post-{{ posts|length }}">
+      <button type="submit" name="more"
+        class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+        Загрузить ещё
+      </button>
+    </form>
+  </div>
+{% endblock content %}

@@ -1,0 +1,55 @@
+{# base.html #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{% endblock title %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900">
+  <!-- Header -->
+  <header class="bg-white shadow-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <a href="{{ url_for('index') }}" class="flex items-center gap-2">
+          <span class="text-2xl font-bold text-purple-600">Social N</span>
+        </a>
+        <nav class="hidden md:flex gap-6 text-gray-600">
+          <a href="{{ url_for('index') }}" class="hover:text-purple-600">Главная</a>
+          <a href="{{ url_for('add_post') }}" class="hover:text-purple-600">Новый пост</a>
+        </nav>
+      </div>
+      <div class="flex items-center gap-4">
+        {% if session["username"] %}
+        <a href="{{ url_for('profile') }}">
+        <button class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">Профиль</button>
+        </a>
+        <a href="{{ url_for('logout') }}" class="hover:text-purple-600">Выйти</a>
+        {% else %}
+        <a href="{{ url_for('login') }}">
+        <button class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">Войти</button>
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <!-- Content -->
+  <main class="max-w-7xl mx-auto px-4 py-6 flex gap-6">
+    <!-- Main content -->
+    <div class="flex-1">
+      {% block content %}{% endblock content %}
+    </div>
+    <!-- Sidebar (рекомендации) -->
+    <aside class="w-72 hidden lg:block">
+      <h2 class="font-semibold mb-3">Рекомендации</h2>
+      <ul class="space-y-3">
+        <li><a href="#" class="block bg-white p-3 rounded-lg shadow hover:bg-gray-50">Совет 1</a></li>
+        <li><a href="#" class="block bg-white p-3 rounded-lg shadow hover:bg-gray-50">Совет 2</a></li>
+        <li><a href="#" class="block bg-white p-3 rounded-lg shadow hover:bg-gray-50">Совет 3</a></li>
+      </ul>
+    </aside>
+  </main>
+</body>
+</html>

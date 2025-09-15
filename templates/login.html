@@ -1,0 +1,29 @@
+{# login.html #}
+{% extends "base.html" %}
+{% block title %}Вход{% endblock title %}
+
+{% block content %}
+<div class="flex justify-center items-center max-h-screen bg-gray-100">
+    <div class="w-full max-w-md p-8 bg-white shadow-lg rounded-lg">
+        <div class="text-center mb-6">
+            <span class="text-2xl font-bold text-purple-600">Social N</span>
+        </div>
+
+        <h2 class="text-2xl font-semibold mb-4 text-center">Вход</h2>
+
+        <form method="post" class="flex flex-col gap-4">
+            <input type="text" name="username" placeholder="Имя пользователя" class="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500" required>
+            
+            <input type="password" name="password" placeholder="Пароль" class="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500" required>
+            
+            <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition">Войти</button>
+        </form>
+
+        <div class="mt-4 text-center">
+            <p class="text-sm text-gray-600">Нет аккаунта? 
+                <a href="{{ url_for('register') }}" class="text-blue-500 hover:text-blue-700">Зарегистрироваться</a>
+            </p>
+        </div>   
+    </div>
+</div>
+{% endblock content %}
