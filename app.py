@@ -1,11 +1,32 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from pathlib import Path
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, abort
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 import sqlite3
 from future.is_allowed import validate_username, validate_email, validate_login
 
 
 app = Flask(__name__)
 app.secret_key = "secret_key_5051"
+app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024
+
+BASE_UPLOAD = Path("static/uploads")
+
+app.config.update(
+    UPLOADS={
+        "avatars": BASE_UPLOAD / "avatars",
+        "posts": BASE_UPLOAD / "posts",
+        "files": BASE_UPLOAD / "files",
+    }
+)
+
+for folder in app.config["UPLOADS"].values():
+    Path(folder).mkdir(parents=True, exist_ok=True)
+
+ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif"}
+"""def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+"""
 
 def get_db_connection():
     conn = sqlite3.connect('app.db')
@@ -23,25 +44,47 @@ def index():
         return redirect(url_for("index", load_posts=load_posts, scroll_to=scroll_to))
 
     conn = get_db_connection()
-    posts = conn.execute("SELECT * FROM posts").fetchmany(load_posts)
+    posts = conn.execute("""
+                         SELECT p.*, u.username 
+                         FROM posts p 
+                         JOIN users u 
+                         ON p.user_id = u.id
+                         ORDER BY p.created_at DESC
+                         
+                         """).fetchmany(load_posts)
     conn.close()
+    post_ids = [post['id'] for post in posts]
+    image_paths = get_photos(post_ids)
 
-    return render_template("index.html", posts=posts, load_posts=load_posts, scroll_to=scroll_to)
+    likes_data = {}
+    for id in post_ids:
+        likes = get_like(str(id))
+        likes_data[id] = likes
+    
+    return render_template("index.html", posts=posts, load_posts=load_posts, scroll_to=scroll_to, image_paths=image_paths, likes_data=likes_data)
 
 
 @app.route("/post/add", methods=['GET','POST'])
 def add_post():
     if 'user_id' not in session:
         return redirect(url_for('login'))
+    
     if request.method == "POST":
             user_id = session['user_id']
             title = request.form['title']
             content = request.form['content']
+            image = request.files.get('file')
+            print(image.filename)
+
             conn = get_db_connection()
             conn.execute("INSERT INTO posts (user_id, title, content) VALUES (?, ?, ?)", (user_id, title, content))
             conn.commit()
+
             post_id = conn.execute("SELECT id FROM posts WHERE user_id = ? AND title = ?", (user_id, title)).fetchone()
             post_id = post_id[0]
+
+            if image and image.filename:
+                image = add_photo(post_id, image, 'posts')
             conn.close()
             return redirect(url_for('get_post', post_id=post_id))
     return render_template("post.html")
@@ -50,9 +93,22 @@ def add_post():
 @app.route("/post/<post_id>")
 def get_post(post_id):
     conn = get_db_connection()
-    post = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
+    post = conn.execute(""" SELECT p.*, u.username FROM posts p
+                        JOIN users u ON p.user_id = u.id
+                        WHERE p.id = ? """, (post_id,)).fetchone()
     conn.close()
-    return render_template("post.html", post=post)
+
+    folder = Path(app.config["UPLOADS"]["posts"])
+
+    image_path = None
+    for ext in ALLOWED_EXTENSIONS:
+        candidate = folder / f"{post_id}{ext}"
+        if candidate.exists():
+            image_path = candidate
+            break
+    likes = get_like(post_id)
+
+    return render_template("post.html", post=post, image_path=image_path, likes=likes)
 
 
 @app.route("/register", methods=['GET', 'POST'])
@@ -131,12 +187,102 @@ def logout():
 def profile():
     if 'user_id' not in session:
         return redirect('login')
-    return render_template("profile.html")
+    user_id = session['user_id']
+    conn = get_db_connection()
+    posts = conn.execute("""
+                         SELECT p.*, u.username 
+                         FROM posts p 
+                         JOIN users u 
+                         ON p.user_id = u.id
+                         ORDER BY p.created_at DESC
+                         """).fetchall()
+    conn.close()
+    post_ids = [post['id'] for post in posts]
+    image_paths = get_photos(post_ids)
+
+    likes_data = {}
+    for id in post_ids:
+        likes = get_like(str(id))
+        likes_data[id] = likes
+
+    return render_template("profile.html", posts=posts, image_paths=image_paths, likes_data=likes_data)
 
     
 @app.route("/comments")
 def get_comments():
     return render_template("comments.html")
+
+@app.route("/uploads/posts/<filename>")
+def serve_post_image(filename):
+    folder = Path(app.config["UPLOADS"]["posts"])
+    file_path = folder / filename
+    if not file_path.exists():
+        abort(404)
+    return send_file(file_path)
+
+
+@app.route("/like/<post_id>", methods=['POST'])
+def like_post(post_id):
+    """post_id"""
+    is_liked = request.form.get('is_liked')
+    print(is_liked)
+    user_id = session['user_id']
+    conn = get_db_connection()
+    if is_liked == 'True':
+        conn.execute("DELETE FROM likes WHERE user_id = ? AND post_id = ?", (user_id, post_id))
+    else: 
+        conn.execute("INSERT INTO likes (user_id, post_id) VALUES (?, ?)",(user_id, post_id))
+    conn.commit()
+    conn.close()
+    if request.form.get('next'):
+        return redirect(url_for('index'))
+    return redirect(url_for('get_post', post_id = post_id))
+
+
+def get_like(post_id):
+    """post_id -> dict: (is_liked, likes)"""
+    if 'user_id' not in session:
+        user_id = 0
+    else:
+        user_id = session['user_id']
+    conn = get_db_connection()
+    is_liked = conn.execute("SELECT id FROM likes WHERE user_id = ? AND post_id = ?", (user_id, post_id)).fetchone()
+    likes_count = conn.execute("SELECT count(id) FROM likes WHERE post_id = ?", (post_id,)).fetchone()
+    conn.close()
+    return { 'is_liked': bool(is_liked), 'likes': likes_count[0] }
+
+
+def add_photo(post_id, file, category):
+    """
+    post_id, file, str: category
+    """
+    filename = secure_filename(file.filename)
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        return None
+    filename = f"{post_id}{ext}"
+    folder = app.config["UPLOADS"][category]
+    filepath = folder / filename
+    file.filename = filename
+    print(filename)
+    file.save(filepath)
+    return filename
+
+
+def get_photos(post_ids):
+    """list: post_ids
+    """
+    folder = Path(app.config["UPLOADS"]["posts"])
+
+    image_paths = {}
+    for post_id in post_ids:
+        for ext in ALLOWED_EXTENSIONS:
+            candidate = folder / f"{post_id}{ext}"
+            if candidate.exists():
+                image_paths[post_id] = candidate
+                break
+    return image_paths
+
 
 if __name__ == ('__main__'):
     app.run(debug=True)
