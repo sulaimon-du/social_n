@@ -8,6 +8,7 @@
   <div class="grid gap-6">
     {% for post in posts %}
     <div class="bg-white p-4 rounded shadow-md max-w-3xl">
+      {% if profile_photos %}<img src="{{ url_for('serve_profile_photo', filename=profile_photos[post.user_id].name)}}" width="100" alt="Фото Профиля"> {% endif %}
       <div class="text-sm text-gray-500 mb-3">{{ post.username }} • {{ post.created_at }}</div>
       {% if post.id in image_paths %}
       <img src="{{ url_for('serve_post_image', filename=image_paths[post.id].name) }}" width="400" alt="Фото поста">

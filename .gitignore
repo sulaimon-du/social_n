@@ -2,3 +2,4 @@
 /config.py
 /future
 /.git
+__pycache__/

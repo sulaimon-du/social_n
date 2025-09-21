@@ -21,7 +21,10 @@
 {% else %}
 <div class="bg-white p-4 rounded shadow-md max-w-3xl">
 
-  <div class="text-sm text-gray-500 mb-3">{{ post.username }} • {{ post.created_at }}</div>
+  <div class="text-sm text-gray-500 mb-3">
+    {% if profile_photo %}<img src="{{ url_for('serve_profile_photo', filename=profile_photo.name)}}" width="100" alt="Фото Профиля"> {% endif %}
+    {{ post.username }} • {{ post.created_at }}
+  </div>
   {% if image_path %}
   <img src="{{ url_for('serve_post_image', filename=image_path.name) }}" width="400" alt="Фото поста">
   {% endif %}
