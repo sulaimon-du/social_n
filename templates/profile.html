@@ -21,12 +21,13 @@
 <p>Имя пользователя: {{ session['username'] }}</p>
 <p>Email: {{ session['email'] }}</p><br>
 
-<h2 class="text-xl font-semibold mb-2"> Мои Посты:</h2>
+
 <div class="grid gap-6">
     {% for post in posts %}
       {% if session['username'] in post.username %}
+        <h2 class="text-xl font-semibold mb-2"> Мои Посты:</h2>
         <div class="bg-white p-4 rounded shadow-md max-w-3xl">
-        <div class="text-sm text-gray-500 mb-3">{{ post.username }} • {{ post.created_at }}</div>
+        <div class="text-sm text-gray-500 mb-3">{{ post.username }} • {{ post.created_at }} </div>
         {% if post.id in image_paths %}
           <img src="{{ url_for('serve_post_image', filename=image_paths[post.id].name) }}" width="400" alt="Фото поста">
         {% endif %}

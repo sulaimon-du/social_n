@@ -22,9 +22,11 @@
         <form action="{{url_for('like_post', post_id=post.id)}}" method="post">
             <input type="hidden" name="is_liked" value="{{likes.is_liked}}">
             <input type="hidden" name="next" value="True">
+            {% if session['user_id']  %}
             <button type="submit" class="rounded-full p-2 text-2xl hover:scale-125 transition-all duration-200 focus:outline-none">
             {% if likes.is_liked %} ❤️ {% else %} 🤍 {% endif %}
-            </button>
+            </button> 
+            {% endif %} 
           </form>
           {% if likes.likes > 1 %} {{likes.likes}} отметок "Нравится"
           {% elif likes.likes == 1 %} {{likes.likes}} отметка "Нравится"

@@ -1,15 +1,21 @@
 from pathlib import Path
-from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory
+from flask import (Flask, render_template, request, redirect, 
+                   url_for, session, send_from_directory, flash)
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-import sqlite3
-from utils import validate_username, validate_email, validate_login
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField, EmailField
+from wtforms.validators import DataRequired, Length, Email, EqualTo
+from flask_bootstrap import Bootstrap5
+
+from instance.db_connect import get_db_connection
+from utils import ( get_like ,user_exist, validate_username, validate_email, validate_login)
 
 
 app = Flask(__name__)
 app.secret_key = "secret_key_5051"
 app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024
-
+bootstrap = Bootstrap5(app)
 BASE_UPLOAD = Path("static/uploads")
 
 app.config.update(
@@ -28,10 +34,73 @@ ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif"}
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 """
 
-def get_db_connection():
-    conn = sqlite3.connect('app.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+
+class RegiesterForm(FlaskForm):
+    username = StringField('Имя пользователя', validators=[
+        DataRequired(message='Имя пользователя обязательно для заполнения'), 
+        Length(min=4, max=10, message='Имя пользователя должно содержать от 4 до 20 символов')
+        ])
+    email = EmailField('Email',validators=[
+        DataRequired(message='Электронная почта обязательна для заполнения'), 
+        Email(message="Введите корректный email")
+        ])
+    password = PasswordField('Password', validators=[
+        DataRequired(message='Пароль обязателен для заполнения'), 
+        Length(min=8, max=30, message='Пароль должен содержать от 8 до 30 символов')
+        ])
+    password_repeated = PasswordField('Подтверждение пароля', validators=[
+        DataRequired(message='Подтвердите пароль'),
+        EqualTo('password', message='Пароли не совпадают')
+        ])
+    submit = SubmitField('Зарегистрироваться')
+
+
+@app.route("/new_register", methods=['GET','POST'])
+def new_register():
+    if 'user_id' in session:
+        return redirect(url_for("profile"))
+    form = RegiesterForm()
+    
+    if form.validate_on_submit() :
+        try:
+            username = form.username.data
+            email = form.email.data
+            password = form.password.data 
+            password_repeated = form.password_repeated
+            validated_u = validate_username(username)
+            validated_e = validate_email(email)
+            exist_u = user_exist(username)
+            exist_e = user_exist(email)
+
+            if validated_u or validated_e or exist_u or exist_e or password or password_repeated: 
+                if validated_u and validated_e:
+                    flash(f"{validated_u} и {validated_e}", 'danger')
+                elif validated_e or validated_u:
+                    flash(f"{validated_u}{validated_e}", 'danger')
+
+                elif exist_e and exist_u:
+                    flash(f"Данное имя пользователя ({username}) и почта ({email}) зарезервированы", 'danger')
+                elif exist_e or exist_u:
+                    flash(f"Данное имя пользователя/почта ({username}{email}) зарезервировано", 'danger')
+
+                elif password == password_repeated:
+                    flash("Пароли не совпадают!", 'danger')
+
+                return render_template('new_register.html', form=form)
+            
+
+            hashed_pw = generate_password_hash(form.password.data)
+            conn = get_db_connection()
+            conn.execute("INSERT INTO users (username, email, password) VALUES (?, ?, ?) ",(form.username.data, form.email.data, hashed_pw))
+            conn.commit()
+            conn.close()
+            flash('Вы успешно зарегестрированы!', 'success')
+        except Exception as e:
+            flash('Произошла ошибка при регистрации. Пожалуйста, попробуйте еще раз')
+            return render_template('new_register.html', form=form)
+        return redirect(url_for('login'))
+    print('no')
+    return render_template('new_register.html', form=form)
 
 
 @app.route("/", methods=['GET', 'POST'])
@@ -126,13 +195,20 @@ def register():
         password = request.form['password']
         validated_u = validate_username(username)
         validated_e = validate_email(email)
+        exist_u = user_exist(username)
+        exist_e = user_exist(email)
 
-        if not username or not email or not password or validated_u or validated_e:
+        if not username or not email or not password or validated_u or validated_e or exist_u or exist_e:
             error = "Пожалуйста заполните все поля"
             if validated_u and validated_e:
                 error = f"{validated_u} и {validated_e}"
             elif validated_e or validated_u:
                 error = f"{validated_u}{validated_e}"
+
+            elif exist_e and exist_u:
+                error = f"Данное имя пользователя ({username}) и почта ({email}) зарезервированы"
+            elif exist_e or exist_u:
+                error = f"Данное имя пользователя/почта ({username}{email}) зарезервировано"
             
             return render_template("register.html", error=error)
             
@@ -149,8 +225,23 @@ def register():
         finally:
             conn.close()
         return redirect(url_for("login"))
-        
+    
     return render_template("register.html")
+
+
+@app.route("/post/<int:post_id>/delete", methods=['POST'])
+def delete_post(post_id):
+    if 'user_id' not in session:
+        return redirect(url_for('profile'))
+    conn = get_db_connection()
+    user_id = conn.execute("SELECT user_id FROM posts WHERE id = ?",(post_id,)).fetchone()
+    user_id = user_id[0]
+    if user_id == session['user_id']:
+        deleted = conn.execute("DELETE FROM posts WHERE user_id = ? AND id = ?", (user_id, post_id))
+        conn.commit()
+        flash("Статья успешно удалена" if deleted else "Возникла ошибка, статья не удалена" )
+    conn.close()
+    return redirect(url_for('profile'))
 
 
 @app.route("/login", methods=['GET', 'POST'])
@@ -164,11 +255,17 @@ def login():
         login = request.form['login']
         password = request.form['password']
         validated = validate_login(login)
+        exist = user_exist(login)
         if validated:
+            error = f"Некорректное имя пользователя или email"
+            return render_template("login.html", error=error)
+        elif not exist:
             error = f"Неверное имя пользователя или email - ({login})"
             return render_template("login.html", error=error)
+        
         conn = get_db_connection()
-        user = conn.execute("SELECT * FROM users WHERE username = ? OR email = ?", (login, login)).fetchone()
+        user = conn.execute("SELECT * FROM users WHERE username = ? OR email = ?", 
+                            (login, login)).fetchone()
         conn.close()
         
 
@@ -256,19 +353,6 @@ def like_post(post_id):
     return redirect(url_for('get_post', post_id = post_id))
 
 
-def get_like(post_id):
-    """post_id -> dict: (is_liked, likes)"""
-    if 'user_id' not in session:
-        user_id = 0
-    else:
-        user_id = session['user_id']
-    conn = get_db_connection()
-    is_liked = conn.execute("SELECT id FROM likes WHERE user_id = ? AND post_id = ?", (user_id, post_id)).fetchone()
-    likes_count = conn.execute("SELECT count(id) FROM likes WHERE post_id = ?", (post_id,)).fetchone()
-    conn.close()
-    return { 'is_liked': bool(is_liked), 'likes': likes_count[0] }
-
-
 def add_photo(post_id, file, category):
     """
     post_id, file, str: category
@@ -317,6 +401,9 @@ def get_photos(post_ids):
                 image_paths[post_id] = candidate
                 break
     return image_paths
+
+
+
 
 
 if __name__ == ('__main__'):
